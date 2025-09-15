@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Flappy Bird - responsive (fixed game world)</title>
+  <!-- <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /> -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
   <style>
@@ -23,46 +24,62 @@
   </style>
 </head>
 <body>
-<canvas id="game"></canvas>
+<canvas id="game" ></canvas>
 
 <script>
-// ==== CONFIG ==== 
+document.addEventListener('touchstart', (e) => {
+  // e.preventDefault(); // chặn scroll/zoom mặc định
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+}, {passive:false});
+// ==== CONFIG: fixed internal "game world" units (do NOT change during gameplay) ====
 const GAME_W = 480;
 const GAME_H = 640;
 
-// ==== DOM ==== 
+// ==== DOM + 2D context ====
 const canvas = document.getElementById('game');
+
+// Input PC + Mobile gọn nhất
+canvas.addEventListener('pointerdown', () => {
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+  sndFlap.currentTime = 0; // reset để k bị trễ khi ấn nhanh
+  sndFlap.play();
+});
+
+// PC thêm phím
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    if (!state.running) startGame();
+    state.bird.velocity = state.bird.lift;
+    sndFlap.currentTime = 0;
+    sndFlap.play();
+  }
+});
+
+function flap(e) {
+  e.preventDefault();
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+}
+
 const ctx = canvas.getContext('2d');
 
-// ==== Assets ==== 
+// ==== Images (put them in ./img/ folder) ====
 const bgImg = new Image(); bgImg.src = './img/background.png';
-const birdImg = new Image(); birdImg.src = './img/bird.png';
+const birdImg = new Image(); birdImg.src = './img/bird.png'; // sprite 3 frames horizontally
 const groundImg = new Image(); groundImg.src = './img/ground.png';
 const pipeImg = new Image(); pipeImg.src = './img/pipe.png';
 
-// Âm thanh
+// ==== Âm thanh ====
 const sndFlap  = new Audio('./sounds/flap.mp3');
 const sndPoint = new Audio('./sounds/point.mp3');
 const sndHit   = new Audio('./sounds/hit.mp3');
+const sndDie   = new Audio('./sounds/die.mp3');
 
-// preload
+// Chặn delay trên mobile (preload)
 [sndFlap, sndPoint, sndHit].forEach(s => s.load());
-
-// ==== STATE ==== 
-const state = {
-  bird: null,
-  pipes: [],
-  frame: 0,
-  score: 0,
-  highScore: parseInt(localStorage.getItem('flappyHighScore')||'0',10),
-  running: false,
-  over: false,
-  groundX: 0
-};
-let devicePixelRatioFactor = 1;
-let groundH = 0;
-
-// load images
+// load assets then init
 const assets = [bgImg, birdImg, groundImg, pipeImg];
 let loaded = 0;
 assets.forEach(i => i.onload = () => {
@@ -70,19 +87,34 @@ assets.forEach(i => i.onload = () => {
   if (loaded === assets.length) onAssetsLoaded();
 });
 
+// ----- STATE -----
+const state = {
+  bird: null,
+  pipes: [],
+  frame: 0,
+  score: 0,
+  highScore: parseInt(localStorage.getItem('flappyHighScore')||'0',10),
+  running: false,
+  groundX: 0
+};
+let devicePixelRatioFactor = 1;
+let groundH = 0;
+
+// ===== init after images ready =====
 function onAssetsLoaded(){
-  groundH = groundImg.height;
+  groundH = groundImg.height; // ground image natural height (in game units)
   setupCanvasForDisplay();
   initGameObjects();
   drawIntro();
+  // handle resize (responsive)
   window.addEventListener('resize', () => {
     setupCanvasForDisplay();
-    if (!state.running && !state.over) drawIntro();
-    if (state.over) drawGameOver();
+    // re-render immediately so intro/ground correct
+    if (!state.running) drawIntro();
   });
 }
 
-// ==== Responsive canvas ==== 
+// ===== keep game world fixed, but scale displayed size to fit screen =====
 function setupCanvasForDisplay(){
   devicePixelRatioFactor = window.devicePixelRatio || 1;
   canvas.width = GAME_W * devicePixelRatioFactor;
@@ -90,20 +122,43 @@ function setupCanvasForDisplay(){
   ctx.setTransform(devicePixelRatioFactor, 0, 0, devicePixelRatioFactor, 0, 0);
 
   if (window.innerWidth < 768) {
+    // 📱 Mobile: full màn
     canvas.style.width = window.innerWidth + "px";
     canvas.style.height = window.innerHeight + "px";
   } else {
+    // 💻 PC: giữ đúng tỉ lệ gốc, căn giữa
     const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
     canvas.style.width = Math.round(GAME_W * scale) + "px";
     canvas.style.height = Math.round(GAME_H * scale) + "px";
   }
 }
 
-// ==== Init bird ==== 
+// function setupCanvasForDisplay(){
+//   // backing store size for crisp rendering on high-DPI
+//   devicePixelRatioFactor = window.devicePixelRatio || 1;
+
+//   // set internal canvas pixel dimensions (backing store) based on DPR
+//   canvas.width = GAME_W * devicePixelRatioFactor;
+//   canvas.height = GAME_H * devicePixelRatioFactor;
+
+//   // set transform so drawing coordinates are in GAME_W x GAME_H units
+//   ctx.setTransform(devicePixelRatioFactor, 0, 0, devicePixelRatioFactor, 0, 0);
+
+//   // compute CSS display size to fit viewport while preserving aspect ratio
+//   const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+//   const displayW = Math.round(GAME_W * scale);
+//   const displayH = Math.round(GAME_H * scale);
+
+//   canvas.style.width = displayW + 'px';
+//   canvas.style.height = displayH + 'px';
+//   // center via body flex already
+// }
+
+// ===== game object init =====
 function initGameObjects(){
   const srcBirdW = birdImg.width/3;
   const srcBirdH = birdImg.height;
-  const scale = 0.6;
+  const scale = 0.6; // relative to sprite natural size (game units)
   state.bird = {
     x: 60,
     y: 160,
@@ -119,35 +174,20 @@ function initGameObjects(){
   };
 }
 
-// ==== Input ==== 
-canvas.addEventListener('pointerdown', () => {
-  if (!state.running && !state.over) {
-    startGame();
-  } else if (state.running) {
-    state.bird.velocity = state.bird.lift;
-    sndFlap.currentTime = 0;
-    sndFlap.play();
-  } else if (state.over) {
-    resetGame();
-  }
+// ===== input (keyboard + touch) =====
+document.addEventListener('keydown', () => {
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
 });
+document.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+}, {passive:false});
 
-document.addEventListener('keydown', e => {
-  if (e.code === 'Space' || e.code === 'ArrowUp') {
-    if (!state.running && !state.over) {
-      startGame();
-    } else if (state.running) {
-      state.bird.velocity = state.bird.lift;
-      sndFlap.currentTime = 0;
-      sndFlap.play();
-    } else if (state.over) {
-      resetGame();
-    }
-  }
-});
-
-// ==== Draw helpers ==== 
+// ===== drawing helpers =====
 function drawBackground(){
+  // draw background only up to top of ground
   ctx.drawImage(bgImg, 0, 0, GAME_W, GAME_H - groundH);
 }
 
@@ -155,23 +195,31 @@ function drawGround() {
   const speed = 2.2;
   state.groundX -= speed;
   if (state.groundX <= -groundImg.width) state.groundX = 0;
+
   for (let x = state.groundX; x < GAME_W; x += groundImg.width) {
+    // Math.floor tránh bị blur line
     ctx.drawImage(groundImg, Math.floor(x), GAME_H - groundH);
   }
 }
 
 function drawBird(){
   const b = state.bird;
-  if (state.running && state.frame % 8 === 0) b.frameIndex = (b.frameIndex + 1) % 3;
+  if (state.frame % 8 === 0) b.frameIndex = (b.frameIndex + 1) % 3;
   const sx = b.frameIndex * b.srcW;
-  const dw = b.displayW, dh = b.displayH;
-  const cx = b.x + dw/2, cy = b.y + dh/2;
+  const sy = 0;
+  const sw = b.srcW;
+  const sh = b.srcH;
+  const dw = b.displayW;
+  const dh = b.displayH;
+
+  const cx = b.x + dw/2;
+  const cy = b.y + dh/2;
   const angle = Math.max(-0.6, Math.min(1.2, b.velocity * 0.12));
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(angle);
-  ctx.drawImage(birdImg, sx, 0, b.srcW, b.srcH, -dw/2, -dh/2, dw, dh);
+  ctx.drawImage(birdImg, sx, sy, sw, sh, -dw/2, -dh/2, dw, dh);
   ctx.restore();
 }
 
@@ -180,20 +228,23 @@ function drawPipe(p){
   const topH = p.top;
   const bottomH = (GAME_H - groundH) - p.bottom;
 
+  // top pipe (flip vertically)
   ctx.save();
   ctx.translate(p.x, p.top);
   ctx.scale(1, -1);
   ctx.drawImage(pipeImg, 0, 0, pipeImg.width, pipeImg.height, 0, 0, w, topH);
   ctx.restore();
 
+  // bottom pipe
   ctx.drawImage(pipeImg, 0, 0, pipeImg.width, pipeImg.height, p.x, p.bottom, w, bottomH);
 }
 
-// ==== Intro ==== 
+// ===== intro (with animated ground) =====
 function drawIntro(){
   ctx.clearRect(0,0,GAME_W,GAME_H);
   drawBackground();
   drawGround();
+
   ctx.fillStyle = 'black';
   ctx.font = '30px Arial';
   ctx.textAlign = 'center';
@@ -201,45 +252,25 @@ function drawIntro(){
   ctx.font = '18px Arial';
   ctx.fillText('Bấm phím hoặc chạm để chơi', GAME_W/2, GAME_H/2);
   ctx.fillText('Điểm cao nhất: ' + state.highScore, GAME_W/2, GAME_H/2 + 40);
-  if (!state.running && !state.over) requestAnimationFrame(drawIntro);
+
+  if (!state.running) requestAnimationFrame(drawIntro);
 }
 
-// ==== Game Over ==== 
-function drawGameOver(){
-  ctx.clearRect(0,0,GAME_W,GAME_H);
-  drawBackground();
-  state.pipes.forEach(p => drawPipe(p));
-  drawGround();
-  drawBird();
-
-  ctx.fillStyle = 'black';
-  ctx.font = '28px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText('GAME OVER', GAME_W/2, GAME_H/2 - 40);
-  ctx.font = '18px Arial';
-  ctx.fillText('Điểm: ' + state.score, GAME_W/2, GAME_H/2);
-  ctx.fillText('Kỷ lục: ' + state.highScore, GAME_W/2, GAME_H/2 + 30);
-  ctx.fillText('Chạm hoặc Space để chơi lại', GAME_W/2, GAME_H/2 + 70);
-}
-
-// ==== Main loop ==== 
+// ===== main loop (uses GAME_W/GAME_H so physics unchanged) =====
 function draw(){
-  if (!state.running) {
-    if (state.over) drawGameOver();
-    else drawIntro();
-    return;
-  }
+  if (!state.running) { drawIntro(); return; }
 
   ctx.clearRect(0,0,GAME_W,GAME_H);
+
   drawBackground();
 
-  // Bird update
+  // bird physics and draw
   const b = state.bird;
   b.velocity += b.gravity;
   b.y += b.velocity;
   drawBird();
 
-  // spawn pipes
+  // spawn pipes (timing in frames based on frame counter -> stable)
   if (state.frame % 120 === 0) {
     const baseGap = 140;
     const gap = Math.max(90, baseGap - Math.floor(state.score/5)*10);
@@ -255,33 +286,43 @@ function draw(){
     drawPipe(p);
     p.x -= 2;
 
-    // collision
-    if (b.x < p.x + p.width && b.x + b.displayW > p.x &&
-       (b.y < p.top || b.y + b.displayH > p.bottom)) {
-      sndHit.currentTime = 0; sndHit.play();
-      state.running = false;
-      state.over = true;
-      drawGameOver();
+    // collision (use displayed sizes)
+    const bw = b.displayW, bh = b.displayH, bx = b.x, by = b.y;
+    if (bx < p.x + p.width && bx + bw > p.x && (by < p.top || by + bh > p.bottom)) {
+      sndHit.currentTime = 0;
+      sndHit.play();
+      resetGame();
       return;
     }
 
-    // score (qua nửa ống)
+    // scoring
     if (!p.scored && p.x + p.width/2 < b.x + b.displayW/2) {
       state.score++;
       p.scored = true;
-      sndPoint.currentTime = 0; sndPoint.play();
+      sndPoint.currentTime = 0;
+      sndPoint.play();
     }
+    // if (!p.scored && p.x + p.width < b.x) { 
+    //   state.score++; 
+    //   p.scored = true; 
+    //   sndPoint.currentTime = 0;
+    //   sndPoint.play();
+    // }
   }
 
   drawGround();
 
-  // ground / top collision
-  if (b.y + b.displayH > GAME_H - groundH || b.y < 0) {
-    sndHit.currentTime = 0; sndHit.play();
-    state.running = false;
-    state.over = true;
-    drawGameOver();
-    return;
+  // ground collision
+  if (b.y + b.displayH > GAME_H - groundH) { 
+    sndHit.currentTime = 0;
+    sndHit.play();
+    resetGame(); 
+    return; 
+  }
+  if (b.y < 0) { 
+    sndHit.currentTime = 0;
+    sndHit.play();
+    resetGame(); return; 
   }
 
   // HUD
@@ -296,7 +337,7 @@ function draw(){
   requestAnimationFrame(draw);
 }
 
-// ==== Reset / Start ==== 
+// ===== start / reset =====
 function resetGame(){
   if (state.score > state.highScore) {
     state.highScore = state.score;
@@ -307,7 +348,6 @@ function resetGame(){
   state.score = 0;
   state.groundX = 0;
   state.running = false;
-  state.over = false;
   const b = state.bird;
   if (b) { b.y = 160; b.velocity = 0; }
   drawIntro();
