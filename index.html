@@ -43,6 +43,8 @@ const canvas = document.getElementById('game');
 canvas.addEventListener('pointerdown', () => {
   if (!state.running) startGame();
   state.bird.velocity = state.bird.lift;
+  sndFlap.currentTime = 0; // reset để k bị trễ khi ấn nhanh
+  sndFlap.play();
 });
 
 // PC thêm phím
@@ -50,6 +52,8 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     if (!state.running) startGame();
     state.bird.velocity = state.bird.lift;
+    sndFlap.currentTime = 0;
+    sndFlap.play();
   }
 });
 
@@ -67,6 +71,14 @@ const birdImg = new Image(); birdImg.src = './img/bird.png'; // sprite 3 frames 
 const groundImg = new Image(); groundImg.src = './img/ground.png';
 const pipeImg = new Image(); pipeImg.src = './img/pipe.png';
 
+// ==== Âm thanh ====
+const sndFlap  = new Audio('./sounds/flap.mp3');
+const sndPoint = new Audio('./sounds/point.mp3');
+const sndHit   = new Audio('./sounds/hit.mp3');
+const sndDie   = new Audio('./sounds/die.mp3');
+
+// Chặn delay trên mobile (preload)
+[sndFlap, sndPoint, sndHit].forEach(s => s.load());
 // load assets then init
 const assets = [bgImg, birdImg, groundImg, pipeImg];
 let loaded = 0;
@@ -277,19 +289,41 @@ function draw(){
     // collision (use displayed sizes)
     const bw = b.displayW, bh = b.displayH, bx = b.x, by = b.y;
     if (bx < p.x + p.width && bx + bw > p.x && (by < p.top || by + bh > p.bottom)) {
+      sndHit.currentTime = 0;
+      sndHit.play();
       resetGame();
       return;
     }
 
     // scoring
-    if (!p.scored && p.x + p.width < b.x) { state.score++; p.scored = true; }
+    if (!p.scored && p.x + p.width/2 < b.x + b.displayW/2) {
+      state.score++;
+      p.scored = true;
+      sndPoint.currentTime = 0;
+      sndPoint.play();
+    }
+    // if (!p.scored && p.x + p.width < b.x) { 
+    //   state.score++; 
+    //   p.scored = true; 
+    //   sndPoint.currentTime = 0;
+    //   sndPoint.play();
+    // }
   }
 
   drawGround();
 
   // ground collision
-  if (b.y + b.displayH > GAME_H - groundH) { resetGame(); return; }
-  if (b.y < 0) { resetGame(); return; }
+  if (b.y + b.displayH > GAME_H - groundH) { 
+    sndHit.currentTime = 0;
+    sndHit.play();
+    resetGame(); 
+    return; 
+  }
+  if (b.y < 0) { 
+    sndHit.currentTime = 0;
+    sndHit.play();
+    resetGame(); return; 
+  }
 
   // HUD
   ctx.fillStyle = '#000';
