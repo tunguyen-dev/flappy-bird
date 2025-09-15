@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <title>Flappy Bird - responsive (fixed game world)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /> -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
   <style>
     html,body { height:100%; margin:0; background:#272b30; }
     body { 
@@ -15,6 +17,7 @@
     canvas {
       display:block; 
       image-rendering: optimizeSpeed;
+      will-change: transform;
       -webkit-tap-highlight-color: rgba(0,0,0,0);
       touch-action: none; /* chuẩn CSS, chặn gesture mặc định */
     }
@@ -25,7 +28,7 @@
 
 <script>
 document.addEventListener('touchstart', (e) => {
-  e.preventDefault(); // chặn scroll/zoom mặc định
+  // e.preventDefault(); // chặn scroll/zoom mặc định
   if (!state.running) startGame();
   state.bird.velocity = state.bird.lift;
 }, {passive:false});
@@ -35,9 +38,13 @@ const GAME_H = 640;
 
 // ==== DOM + 2D context ====
 const canvas = document.getElementById('game');
-canvas.addEventListener('pointerdown', flap);
-canvas.addEventListener('touchstart', flap, {passive:false});
-canvas.addEventListener('mousedown', flap); // PC
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault(); // chặn scroll/zoom mặc định
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+});
+
 function flap(e) {
   e.preventDefault();
   if (!state.running) startGame();
