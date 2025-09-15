@@ -39,10 +39,19 @@ const GAME_H = 640;
 // ==== DOM + 2D context ====
 const canvas = document.getElementById('game');
 
+// ==== Input chung PC + Mobile ====
 canvas.addEventListener('pointerdown', e => {
-  e.preventDefault(); // chặn scroll/zoom mặc định
+  // không cần e.preventDefault() nữa vì CSS đã có touch-action: none
   if (!state.running) startGame();
   state.bird.velocity = state.bird.lift;
+});
+
+// PC thêm keyboard
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    if (!state.running) startGame();
+    state.bird.velocity = state.bird.lift;
+  }
 });
 
 function flap(e) {
