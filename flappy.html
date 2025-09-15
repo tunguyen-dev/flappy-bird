@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Flappy Bird - demo</title>
+  <link rel="icon" href="./img/Flappy_Bird_icon.png">
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #272b30;
+    }
+    canvas { background: #70C5CD; display:block; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="480" height="640"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- Load ảnh ---
+const bgImg = new Image();  bgImg.src = './img/background.png';
+const birdImg = new Image(); birdImg.src = './img/bird.png';   // sprite 3 frames horizontally
+const groundImg = new Image(); groundImg.src = './img/ground.png';
+const pipeImg = new Image();  pipeImg.src = './img/pipe.png';
+
+const assets = [bgImg, birdImg, groundImg, pipeImg];
+let assetsLoaded = 0;
+assets.forEach(img => img.onload = () => {
+  assetsLoaded++;
+  if (assetsLoaded === assets.length) init(); // start after all loaded
+});
+
+// --- Game state & config (will be initialized in init()) ---
+let groundH = 0;
+const state = {
+  bird: null,
+  pipes: [],
+  frame: 0,
+  score: 0,
+  highScore: parseInt(localStorage.getItem('flappyHighScore') || '0', 10),
+  running: false,
+  groundX: 0
+};
+
+// --- Initialize sizes after assets loaded ---
+function init() {
+  groundH = groundImg.height;
+
+  const srcBirdW = birdImg.width / 3;   // 3 frames
+  const srcBirdH = birdImg.height;
+  const scale = 0.6; // chỉnh nếu muốn chim to/nhỏ
+
+  state.bird = {
+    x: 60,
+    y: 160,
+    srcW: srcBirdW,
+    srcH: srcBirdH,
+    scale,
+    displayW: srcBirdW * scale,
+    displayH: srcBirdH * scale,
+    frameIndex: 0,
+    gravity: 0.28,
+    lift: -4.5,
+    velocity: 0,
+    flapTick: 0
+  };
+
+  // show intro
+  drawIntro();
+}
+
+// --- Input: nhấn phím bất kỳ để start / flap ---
+document.addEventListener('keydown', () => {
+  if (!state.running) {
+    startGame();
+  }
+  state.bird.velocity = state.bird.lift;
+});
+
+// ================== VẼ GROUND ==================
+function drawGround() {
+  // update vị trí ground
+  state.groundX -= 2.2;
+  if (state.groundX <= -groundImg.width) state.groundX = 0;
+
+  // vẽ lặp ground full màn hình
+  for (let x = state.groundX; x < canvas.width; x += groundImg.width) {
+    ctx.drawImage(groundImg, x, canvas.height - groundH);
+  }
+}
+
+// --- Draw intro screen ---
+function drawIntro() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // background
+//   ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height - groundH);
+  // ground có hiệu ứng chạy
+  drawGround();
+
+  // text intro
+  ctx.fillStyle = "black";
+  ctx.font = "30px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Flappy Bird", canvas.width / 2, canvas.height / 2 - 50);
+
+  ctx.font = "20px Arial";
+  ctx.fillText("Bấm phím bất kỳ để chơi", canvas.width / 2, canvas.height / 2);
+  ctx.fillText("Điểm cao nhất: " + state.highScore, canvas.width / 2, canvas.height / 2 + 50);
+
+  if (!state.running) requestAnimationFrame(drawIntro);
+}
+
+// --- Draw bird (sprite + rotation based on velocity) ---
+function drawBird() {
+  const b = state.bird;
+  // animate wing
+  if (state.frame % 8 === 0) b.frameIndex = (b.frameIndex + 1) % 3;
+
+  const sx = b.frameIndex * b.srcW;
+  const sy = 0;
+  const sw = b.srcW;
+  const sh = b.srcH;
+  const dw = b.displayW;
+  const dh = b.displayH;
+
+  // rotate slightly according to velocity
+  const centerX = b.x + dw/2;
+  const centerY = b.y + dh/2;
+  const angle = Math.max(-0.6, Math.min(1.2, b.velocity * 0.12)); // clamp angle
+
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate(angle);
+  ctx.drawImage(birdImg, sx, sy, sw, sh, -dw/2, -dh/2, dw, dh);
+  ctx.restore();
+}
+
+// --- Draw single pipe (using single pipeImg):
+//  - p.top is distance from top to gap start
+//  - p.bottom is gap end (y)
+//  We draw top pipe flipped vertically so its open cap faces down.
+//  We draw bottom pipe normally so its open cap faces up.
+// ---
+function drawPipe(p) {
+  const w = p.width;
+  const topH = p.top; // height for top pipe area
+  const bottomH = (canvas.height - groundH) - p.bottom; // height for bottom pipe area
+
+  // top pipe (flip vertically):
+  ctx.save();
+  ctx.translate(p.x, p.top);      // move origin to (p.x, p.top)
+  ctx.scale(1, -1);               // flip vertically
+  // draw pipe image with dest width w and dest height topH
+  ctx.drawImage(pipeImg, 0, 0, pipeImg.width, pipeImg.height, 0, 0, w, topH);
+  ctx.restore();
+
+  // bottom pipe (normal)
+  ctx.drawImage(pipeImg, 0, 0, pipeImg.width, pipeImg.height, p.x, p.bottom, w, bottomH);
+}
+
+// --- Main loop ---
+function draw() {
+  if (!state.running) {
+    drawIntro();
+    return;
+  }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // background (only up to top of ground)
+  ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height - groundH);
+
+  // bird physics & draw
+  const b = state.bird;
+  b.velocity += b.gravity;
+  b.y += b.velocity;
+  drawBird();
+
+  // spawn pipes
+  if (state.frame % 120 === 0) {
+    const baseGap = 140;
+    const gap = Math.max(90, baseGap - Math.floor(state.score / 5) * 10);
+    // ensure pipes don't overlap ground: available = canvas.height - groundH
+    const maxTop = (canvas.height - groundH) - gap - 40;
+    const top = Math.random() * Math.max(0, maxTop) + 20;
+    const width = 64; // pipe width in px (tweak if needed)
+    state.pipes.push({ x: canvas.width, top: top, bottom: top + gap, width: width });
+  }
+
+  // draw + move pipes, check collisions & scoring
+  for (let i = 0; i < state.pipes.length; i++) {
+    const p = state.pipes[i];
+    drawPipe(p);
+    p.x -= 2;
+
+    // display collision box sizes (use displayed bird dims)
+    const bw = b.displayW, bh = b.displayH;
+    const bx = b.x, by = b.y;
+
+    if (
+      bx < p.x + p.width &&
+      bx + bw > p.x &&
+      (by < p.top || by + bh > p.bottom)
+    ) {
+      // collision -> reset
+      resetGame();
+      return; // stop this frame to avoid further drawing
+    }
+
+    // scoring: when bird passes the pipe
+    if (!p.scored && p.x + p.width < b.x) {
+      state.score++;
+      p.scored = true;
+    }
+  }
+
+    // ground scroll (looping)
+    // state.groundX -= 4;
+    // if (state.groundX <= -groundImg.width) state.groundX = 0;
+
+    //     // vẽ ground lặp liên tục phủ hết chiều rộng canvas
+    //     for (let x = state.groundX; x < canvas.width; x += groundImg.width) {
+    //     ctx.drawImage(groundImg, x, canvas.height - groundH);
+    // }
+    drawGround();
+
+  // ground collision (bird hitting ground)
+  if (b.y + b.displayH > canvas.height - groundH) {
+    resetGame();
+    return;
+  }
+  if (b.y < 0) {
+    resetGame();
+    return;
+  }
+
+  // HUD
+  ctx.fillStyle = '#000';
+  ctx.font = '20px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Điểm: ' + state.score, 10, 26);
+  ctx.textAlign = 'right';
+  ctx.fillText('Điểm cao nhất: ' + state.highScore, canvas.width - 10, 26);
+
+  state.frame++;
+  requestAnimationFrame(draw);
+}
+
+// --- Reset & Start ---
+function resetGame() {
+  if (state.score > state.highScore) {
+    state.highScore = state.score;
+    localStorage.setItem('flappyHighScore', String(state.highScore));
+  }
+  state.pipes = [];
+  state.frame = 0;
+  state.score = 0;
+  state.groundX = 0;
+  state.running = false;
+  // reset bird pos & velocity
+  const b = state.bird;
+  b.y = 160;
+  b.velocity = 0;
+  drawIntro();
+}
+
+function startGame() {
+  resetGame(); // ensure clean start
+  state.running = true;
+  draw();
+}
+</script>
+</body>
+</html>
