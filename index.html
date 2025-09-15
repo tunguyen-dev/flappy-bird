@@ -7,19 +7,38 @@
   <style>
     html,body { height:100%; margin:0; background:#272b30; }
     body { display:flex; align-items:center; justify-content:center; }
-    canvas { display:block; image-rendering: optimizeSpeed; /* CSS scaling used for responsiveness */ }
+    canvas {
+      display:block; 
+      image-rendering: optimizeSpeed;
+      -webkit-tap-highlight-color: rgba(0,0,0,0);
+      touch-action: none; /* chuẩn CSS, chặn gesture mặc định */
+    }
   </style>
 </head>
 <body>
 <canvas id="game" ></canvas>
 
 <script>
+document.addEventListener('touchstart', (e) => {
+  e.preventDefault(); // chặn scroll/zoom mặc định
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+}, {passive:false});
 // ==== CONFIG: fixed internal "game world" units (do NOT change during gameplay) ====
 const GAME_W = 480;
 const GAME_H = 640;
 
 // ==== DOM + 2D context ====
 const canvas = document.getElementById('game');
+canvas.addEventListener('pointerdown', flap);
+canvas.addEventListener('touchstart', flap, {passive:false});
+canvas.addEventListener('mousedown', flap); // PC
+function flap(e) {
+  e.preventDefault();
+  if (!state.running) startGame();
+  state.bird.velocity = state.bird.lift;
+}
+
 const ctx = canvas.getContext('2d');
 
 // ==== Images (put them in ./img/ folder) ====
