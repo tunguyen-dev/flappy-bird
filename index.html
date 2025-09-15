@@ -39,14 +39,13 @@ const GAME_H = 640;
 // ==== DOM + 2D context ====
 const canvas = document.getElementById('game');
 
-// ==== Input chung PC + Mobile ====
-canvas.addEventListener('pointerdown', e => {
-  // không cần e.preventDefault() nữa vì CSS đã có touch-action: none
+// Input PC + Mobile gọn nhất
+canvas.addEventListener('pointerdown', () => {
   if (!state.running) startGame();
   state.bird.velocity = state.bird.lift;
 });
 
-// PC thêm keyboard
+// PC thêm phím
 document.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     if (!state.running) startGame();
