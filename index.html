@@ -65,25 +65,43 @@ function onAssetsLoaded(){
 
 // ===== keep game world fixed, but scale displayed size to fit screen =====
 function setupCanvasForDisplay(){
-  // backing store size for crisp rendering on high-DPI
   devicePixelRatioFactor = window.devicePixelRatio || 1;
-
-  // set internal canvas pixel dimensions (backing store) based on DPR
   canvas.width = GAME_W * devicePixelRatioFactor;
   canvas.height = GAME_H * devicePixelRatioFactor;
-
-  // set transform so drawing coordinates are in GAME_W x GAME_H units
   ctx.setTransform(devicePixelRatioFactor, 0, 0, devicePixelRatioFactor, 0, 0);
 
-  // compute CSS display size to fit viewport while preserving aspect ratio
-  const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
-  const displayW = Math.round(GAME_W * scale);
-  const displayH = Math.round(GAME_H * scale);
-
-  canvas.style.width = displayW + 'px';
-  canvas.style.height = displayH + 'px';
-  // center via body flex already
+  if (window.innerWidth < 768) {
+    // 📱 Mobile: full màn
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+  } else {
+    // 💻 PC: giữ đúng tỉ lệ gốc, căn giữa
+    const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+    canvas.style.width = Math.round(GAME_W * scale) + "px";
+    canvas.style.height = Math.round(GAME_H * scale) + "px";
+  }
 }
+
+// function setupCanvasForDisplay(){
+//   // backing store size for crisp rendering on high-DPI
+//   devicePixelRatioFactor = window.devicePixelRatio || 1;
+
+//   // set internal canvas pixel dimensions (backing store) based on DPR
+//   canvas.width = GAME_W * devicePixelRatioFactor;
+//   canvas.height = GAME_H * devicePixelRatioFactor;
+
+//   // set transform so drawing coordinates are in GAME_W x GAME_H units
+//   ctx.setTransform(devicePixelRatioFactor, 0, 0, devicePixelRatioFactor, 0, 0);
+
+//   // compute CSS display size to fit viewport while preserving aspect ratio
+//   const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+//   const displayW = Math.round(GAME_W * scale);
+//   const displayH = Math.round(GAME_H * scale);
+
+//   canvas.style.width = displayW + 'px';
+//   canvas.style.height = displayH + 'px';
+//   // center via body flex already
+// }
 
 // ===== game object init =====
 function initGameObjects(){
