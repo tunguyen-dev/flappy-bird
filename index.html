@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <title>Flappy Bird - responsive (fixed game world)</title>
+  <title>Flappy Bird - responsive (mobile optimized)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
   <style>
@@ -18,7 +18,7 @@
       image-rendering: optimizeSpeed;
       will-change: transform;
       -webkit-tap-highlight-color: rgba(0,0,0,0);
-      touch-action: none; /* chuẩn CSS, chặn gesture mặc định */
+      touch-action: none; /* ngăn scroll/zoom mặc định */
     }
   </style>
 </head>
@@ -45,8 +45,14 @@ const sndFlap  = new Audio('./sounds/flap.mp3');
 const sndPoint = new Audio('./sounds/point.mp3');
 const sndHit   = new Audio('./sounds/hit.mp3');
 
-// preload
+// preload audio
 [sndFlap, sndPoint, sndHit].forEach(s => s.load());
+
+// helper chống lag âm thanh
+function playSound(snd) {
+  const clone = snd.cloneNode();
+  clone.play().catch(()=>{});
+}
 
 // ==== STATE ==== 
 const state = {
@@ -125,21 +131,20 @@ canvas.addEventListener('pointerdown', () => {
     startGame();
   } else if (state.running) {
     state.bird.velocity = state.bird.lift;
-    sndFlap.currentTime = 0;
-    sndFlap.play();
+    playSound(sndFlap);
   } else if (state.over) {
     resetGame();
   }
 });
 
+// PC thêm phím
 document.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     if (!state.running && !state.over) {
       startGame();
     } else if (state.running) {
       state.bird.velocity = state.bird.lift;
-      sndFlap.currentTime = 0;
-      sndFlap.play();
+      playSound(sndFlap);
     } else if (state.over) {
       resetGame();
     }
@@ -258,7 +263,7 @@ function draw(){
     // collision
     if (b.x < p.x + p.width && b.x + b.displayW > p.x &&
        (b.y < p.top || b.y + b.displayH > p.bottom)) {
-      sndHit.currentTime = 0; sndHit.play();
+      playSound(sndHit);
       state.running = false;
       state.over = true;
       drawGameOver();
@@ -269,7 +274,7 @@ function draw(){
     if (!p.scored && p.x + p.width/2 < b.x + b.displayW/2) {
       state.score++;
       p.scored = true;
-      sndPoint.currentTime = 0; sndPoint.play();
+      playSound(sndPoint);
     }
   }
 
@@ -277,7 +282,7 @@ function draw(){
 
   // ground / top collision
   if (b.y + b.displayH > GAME_H - groundH || b.y < 0) {
-    sndHit.currentTime = 0; sndHit.play();
+    playSound(sndHit);
     state.running = false;
     state.over = true;
     drawGameOver();
