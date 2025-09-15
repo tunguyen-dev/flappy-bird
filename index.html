@@ -2,14 +2,12 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <title>Flappy Bird - WebAudio Optimized</title>
+  <title>Flappy Bird - Pipe Head/Body (fixed)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <style>
     html,body { height:100%; margin:0; background:#272b30; }
     body { 
-      display:flex; 
-      align-items:center; 
-      justify-content:center; 
+      display:flex; align-items:center; justify-content:center;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     canvas {
@@ -34,9 +32,10 @@ const ctx = canvas.getContext('2d');
 const bgImg = new Image(); bgImg.src = './img/background.png';
 const birdImg = new Image(); birdImg.src = './img/bird.png';
 const groundImg = new Image(); groundImg.src = './img/ground.png';
-const pipeImg = new Image(); pipeImg.src = './img/pipe.png';
+const pipeHeadImg = new Image(); pipeHeadImg.src = './img/pipe-head.png';
+const pipeBodyImg = new Image(); pipeBodyImg.src = './img/pipe-body.png';
 
-/* ==== WEB AUDIO ==== */
+/* ==== WEB AUDIO (như bạn có) ==== */
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const sounds = {};
 async function loadSound(name, url){
@@ -51,177 +50,301 @@ function playSound(name){
   src.connect(audioCtx.destination);
   src.start(0);
 }
-// preload
 Promise.all([
   loadSound('flap','./sounds/flap.mp3'),
   loadSound('point','./sounds/point.mp3'),
   loadSound('hit','./sounds/hit.mp3'),
   loadSound('die','./sounds/die.mp3')
-]);
+]).catch(()=>{ /* ignore load errors for now */ });
+
+/* ==== GLOBAL PIPE CONFIG (set sau khi ảnh load) ==== */
+let PIPE_NAT_W = 64, PIPE_HEAD_H = 24, PIPE_BODY_H = 16;
+const PIPE_SCALE_X = 0.6; // chỉnh ống "dẹt" ngang (0.8..1.0). Bạn muốn dẹt hơn -> giảm
+let PIPE_W = Math.round(PIPE_NAT_W * PIPE_SCALE_X);
 
 /* ==== STATE ==== */
 const state = {
   bird:null, pipes:[], frame:0, score:0,
-  highScore:parseInt(localStorage.getItem('flappyHighScore')||'0',10),
+  highScore: parseInt(localStorage.getItem('flappyHighScore')||'0',10),
   running:false, over:false, groundX:0
 };
-let groundH=0, devicePixelRatioFactor=1;
+let devicePixelRatioFactor = 1;
+let groundH = 0;
 
-/* ==== LOAD ==== */
-const assets=[bgImg,birdImg,groundImg,pipeImg]; let loaded=0;
-assets.forEach(i => i.onload=()=>{ if(++loaded===assets.length) onAssetsLoaded(); });
+/* ==== LOAD assets detection ==== */
+const assets = [bgImg,birdImg,groundImg,pipeHeadImg,pipeBodyImg];
+let loaded = 0;
+assets.forEach(img => img.onload = () => {
+  loaded++;
+  if (loaded === assets.length) onAssetsLoaded();
+});
 
 function onAssetsLoaded(){
   groundH = groundImg.height;
+  // set pipe natural sizes once images loaded
+  PIPE_NAT_W = pipeHeadImg.width;
+  PIPE_HEAD_H = pipeHeadImg.height;
+  PIPE_BODY_H = pipeBodyImg.height;
+  PIPE_W = Math.round(PIPE_NAT_W * PIPE_SCALE_X);
+
   setupCanvas();
   initBird();
   drawIntro();
-  window.addEventListener('resize', ()=>{ setupCanvas(); if(!state.running&&!state.over) drawIntro(); if(state.over) drawGameOver(); });
+  window.addEventListener('resize', () => {
+    setupCanvas();
+    if (!state.running && !state.over) drawIntro();
+    if (state.over) drawGameOver();
+  });
 }
 
-/* ==== Responsive ==== */
+/* ==== Responsive canvas ==== */
 function setupCanvas(){
   devicePixelRatioFactor = window.devicePixelRatio || 1;
-  canvas.width = GAME_W*devicePixelRatioFactor;
-  canvas.height = GAME_H*devicePixelRatioFactor;
-  ctx.setTransform(devicePixelRatioFactor,0,0,devicePixelRatioFactor,0,0);
+  canvas.width = GAME_W * devicePixelRatioFactor;
+  canvas.height = GAME_H * devicePixelRatioFactor;
+  ctx.setTransform(devicePixelRatioFactor, 0, 0, devicePixelRatioFactor, 0, 0);
 
-  if(window.innerWidth<768){
-    canvas.style.width=window.innerWidth+"px";
-    canvas.style.height=window.innerHeight+"px";
+  if (window.innerWidth < 768) {
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
   } else {
-    const scale=Math.min(window.innerWidth/GAME_W, window.innerHeight/GAME_H);
-    canvas.style.width=Math.round(GAME_W*scale)+"px";
-    canvas.style.height=Math.round(GAME_H*scale)+"px";
+    const scale = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+    canvas.style.width = Math.round(GAME_W * scale) + "px";
+    canvas.style.height = Math.round(GAME_H * scale) + "px";
   }
 }
 
-/* ==== Bird ==== */
+/* ==== Bird init ==== */
 function initBird(){
-  const srcW = birdImg.width/3, srcH = birdImg.height;
-  const scale=0.6;
-  state.bird={x:60,y:160,srcW,srcH,scale,
-    displayW:srcW*scale, displayH:srcH*scale,
-    frameIndex:0,gravity:0.28,lift:-4.5,velocity:0};
+  const srcW = birdImg.width / 3, srcH = birdImg.height;
+  const scale = 0.6;
+  state.bird = {
+    x: 60, y: 160, srcW, srcH, scale,
+    displayW: srcW * scale, displayH: srcH * scale,
+    frameIndex: 0, gravity: 0.28, lift: -4.5, velocity: 0
+  };
 }
 
-/* ==== INPUT ==== */
-canvas.addEventListener('pointerdown',()=>{
-  audioCtx.resume(); // cần cho iOS
-  if(!state.running && !state.over){ startGame(); }
-  else if(state.running){
-    state.bird.velocity=state.bird.lift;
+/* ==== Input ==== */
+canvas.addEventListener('pointerdown', () => {
+  audioCtx.resume();
+  if (!state.running && !state.over) { startGame(); }
+  else if (state.running) {
+    state.bird.velocity = state.bird.lift;
     playSound('flap');
-  } else if(state.over){ resetGame(); }
+  } else if (state.over) {
+    resetGame();
+  }
 });
-document.addEventListener('keydown',e=>{
-  if(e.code==='Space'||e.code==='ArrowUp'){
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
     audioCtx.resume();
-    if(!state.running && !state.over){ startGame(); }
-    else if(state.running){
-      state.bird.velocity=state.bird.lift;
+    if (!state.running && !state.over) { startGame(); }
+    else if (state.running) {
+      state.bird.velocity = state.bird.lift;
       playSound('flap');
-    } else if(state.over){ resetGame(); }
+    } else if (state.over) {
+      resetGame();
+    }
   }
 });
 
-/* ==== DRAW ==== */
-function drawBackground(){ ctx.drawImage(bgImg,0,0,GAME_W,GAME_H-groundH); }
+/* ==== Drawing helpers ==== */
+function drawBackground(){ ctx.drawImage(bgImg, 0, 0, GAME_W, GAME_H - groundH); }
+
 function drawGround(){
-  const speed=2.2; state.groundX-=speed;
-  if(state.groundX<=-groundImg.width) state.groundX=0;
-  for(let x=state.groundX;x<GAME_W;x+=groundImg.width){
-    ctx.drawImage(groundImg,Math.floor(x),GAME_H-groundH);
+  const speed = 2.2;
+  state.groundX -= speed;
+  if (state.groundX <= -groundImg.width) state.groundX = 0;
+  for (let x = state.groundX; x < GAME_W; x += groundImg.width) {
+    ctx.drawImage(groundImg, Math.floor(x), GAME_H - groundH);
   }
 }
+
 function drawBird(){
-  const b=state.bird;
-  if(state.running && state.frame%8===0) b.frameIndex=(b.frameIndex+1)%3;
-  const sx=b.frameIndex*b.srcW;
-  const dw=b.displayW, dh=b.displayH, cx=b.x+dw/2, cy=b.y+dh/2;
-  const angle=Math.max(-0.6,Math.min(1.2,b.velocity*0.12));
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
-  ctx.drawImage(birdImg,sx,0,b.srcW,b.srcH,-dw/2,-dh/2,dw,dh);
+  const b = state.bird;
+  if (state.running && state.frame % 8 === 0) b.frameIndex = (b.frameIndex + 1) % 3;
+  const sx = b.frameIndex * b.srcW;
+  const dw = b.displayW, dh = b.displayH;
+  const cx = b.x + dw / 2, cy = b.y + dh / 2;
+  const angle = Math.max(-0.6, Math.min(1.2, b.velocity * 0.12));
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+  ctx.drawImage(birdImg, sx, 0, b.srcW, b.srcH, -dw/2, -dh/2, dw, dh);
   ctx.restore();
 }
-function drawPipe(p){
-  const w=p.width, topH=p.top, bottomH=(GAME_H-groundH)-p.bottom;
-  ctx.save(); ctx.translate(p.x,p.top); ctx.scale(1,-1);
-  ctx.drawImage(pipeImg,0,0,pipeImg.width,pipeImg.height,0,0,w,topH); ctx.restore();
-  ctx.drawImage(pipeImg,0,0,pipeImg.width,pipeImg.height,p.x,p.bottom,w,bottomH);
+
+/* ==== Fixed drawPipe: head + tiled body ==== */
+function drawPipe(p) {
+  // p.width is destination width (already includes scale)
+  const destW = p.width;
+  const headH = PIPE_HEAD_H;
+  const bodyH = PIPE_BODY_H;
+  const offsetX = p.x; // left x for drawing
+
+  // TOP pipe:
+  const topBodyHeight = p.top - headH; // space for body above head
+  // draw body tiles (flipped)
+  for (let y = topBodyHeight; y > 0; y -= bodyH) {
+    ctx.save();
+    // translate to the bottom position where tile bottom should be 'y'
+    ctx.translate(offsetX, y);
+    ctx.scale(1, -1);
+    ctx.drawImage(pipeBodyImg,
+                  0, 0, pipeBodyImg.width, pipeBodyImg.height,
+                  0, 0, destW, bodyH);
+    ctx.restore();
+  }
+  // draw top head (flipped so it faces down), bottom of head aligns to p.top
+  ctx.save();
+  ctx.translate(offsetX, p.top);
+  ctx.scale(1, -1);
+  ctx.drawImage(pipeHeadImg,
+                0, 0, pipeHeadImg.width, PIPE_HEAD_H,
+                0, 0, destW, headH);
+  ctx.restore();
+
+  // BOTTOM pipe:
+  // draw head at y = p.bottom (head top aligned at p.bottom)
+  ctx.drawImage(pipeHeadImg,
+                0, 0, pipeHeadImg.width, PIPE_HEAD_H,
+                offsetX, p.bottom, destW, headH);
+  // draw body tiles downward from p.bottom + headH
+  for (let y = p.bottom + headH; y < GAME_H - groundH; y += bodyH) {
+    ctx.drawImage(pipeBodyImg,
+                  0, 0, pipeBodyImg.width, pipeBodyImg.height,
+                  offsetX, y, destW, bodyH);
+  }
 }
 
-/* ==== SCREENS ==== */
+/* ==== Screens ==== */
 function drawIntro(){
   ctx.clearRect(0,0,GAME_W,GAME_H);
   drawBackground(); drawGround();
   ctx.fillStyle='black'; ctx.font='30px Arial'; ctx.textAlign='center';
-  ctx.fillText('Flappy Bird',GAME_W/2,GAME_H/2-50);
+  ctx.fillText('Flappy Bird', GAME_W/2, GAME_H/2 - 50);
   ctx.font='18px Arial';
-  ctx.fillText('Bấm phím hoặc chạm để chơi',GAME_W/2,GAME_H/2);
-  ctx.fillText('Điểm cao nhất: '+state.highScore,GAME_W/2,GAME_H/2+40);
-  if(!state.running&&!state.over) requestAnimationFrame(drawIntro);
+  ctx.fillText('Bấm phím hoặc chạm để chơi', GAME_W/2, GAME_H/2);
+  ctx.fillText('Điểm cao nhất: ' + state.highScore, GAME_W/2, GAME_H/2 + 40);
+  if (!state.running && !state.over) requestAnimationFrame(drawIntro);
 }
 function drawGameOver(){
   ctx.clearRect(0,0,GAME_W,GAME_H);
-  drawBackground(); state.pipes.forEach(p=>drawPipe(p)); drawGround(); drawBird();
+  drawBackground(); state.pipes.forEach(p => drawPipe(p)); drawGround(); drawBird();
   ctx.fillStyle='black'; ctx.font='28px Arial'; ctx.textAlign='center';
-  ctx.fillText('GAME OVER',GAME_W/2,GAME_H/2-40);
+  ctx.fillText('GAME OVER', GAME_W/2, GAME_H/2 - 40);
   ctx.font='18px Arial';
-  ctx.fillText('Điểm: '+state.score,GAME_W/2,GAME_H/2);
-  ctx.fillText('Kỷ lục: '+state.highScore,GAME_W/2,GAME_H/2+30);
-  ctx.fillText('Chạm hoặc Space để chơi lại',GAME_W/2,GAME_H/2+70);
+  ctx.fillText('Điểm: ' + state.score, GAME_W/2, GAME_H/2);
+  ctx.fillText('Kỷ lục: ' + state.highScore, GAME_W/2, GAME_H/2 + 30);
+  ctx.fillText('Chạm hoặc Space để chơi lại', GAME_W/2, GAME_H/2 + 70);
 }
 
-/* ==== MAIN LOOP ==== */
+/* ==== MAIN LOOP (kèm spawn clamp and cleanup) ==== */
 function draw(){
-  if(!state.running){ if(state.over) drawGameOver(); else drawIntro(); return; }
+  if (!state.running) {
+    if (state.over) drawGameOver();
+    else drawIntro();
+    return;
+  }
+
   ctx.clearRect(0,0,GAME_W,GAME_H);
   drawBackground();
 
-  const b=state.bird;
-  b.velocity+=b.gravity; b.y+=b.velocity; drawBird();
+  const b = state.bird;
+  b.velocity += b.gravity;
+  b.y += b.velocity;
+  drawBird();
 
-  if(state.frame%120===0){
-    const baseGap=140, gap=Math.max(90,baseGap-Math.floor(state.score/5)*10);
-    const maxTop=(GAME_H-groundH)-gap-40;
-    const top=Math.random()*Math.max(0,maxTop)+20;
-    state.pipes.push({x:GAME_W, top, bottom:top+gap, width:64});
+  // spawn pipes (use PIPE_HEAD_H to ensure top >= head)
+  if (state.frame % 120 === 0) {
+    const baseGap = 140;
+    const gap = Math.max(90, baseGap - Math.floor(state.score / 5) * 10);
+
+    const minTop = PIPE_HEAD_H + 8; // đảm bảo đầu ống trên có chỗ
+    // maxTop đảm bảo ống dưới có chỗ cho head + 10px
+    let maxTop = (GAME_H - groundH) - gap - PIPE_HEAD_H - 8;
+    if (maxTop < minTop) maxTop = minTop;
+    const top = minTop + Math.random() * (maxTop - minTop);
+
+    // p.width = displayed width after scale
+    const pWidth = PIPE_W;
+
+    state.pipes.push({
+      x: GAME_W,
+      top: Math.round(top),
+      bottom: Math.round(top + gap),
+      width: pWidth,
+      scored: false
+    });
   }
-  for(const p of state.pipes){
-    drawPipe(p); p.x-=2;
-    if(b.x<p.x+p.width && b.x+b.displayW>p.x && (b.y<p.top||b.y+b.displayH>p.bottom)){
-      playSound('hit'); state.running=false; state.over=true; drawGameOver(); return;
+
+  // move & draw pipes, iterate backwards for safe removal
+  for (let i = state.pipes.length - 1; i >= 0; i--) {
+    const p = state.pipes[i];
+    drawPipe(p);
+    p.x -= 2;
+
+    // collision box uses displayed width
+    if (b.x < p.x + p.width && b.x + b.displayW > p.x &&
+       (b.y < p.top || b.y + b.displayH > p.bottom)) {
+      playSound('hit');
+      state.running = false;
+      state.over = true;
+      drawGameOver();
+      return;
     }
-    if(!p.scored && p.x+p.width/2<b.x+b.displayW/2){
-      state.score++; p.scored=true; playSound('point');
+
+    if (!p.scored && p.x + p.width/2 < b.x + b.displayW/2) {
+      state.score++;
+      p.scored = true;
+      playSound('point');
+    }
+
+    // remove off-screen pipes to avoid memory growth
+    if (p.x + p.width < -50) {
+      state.pipes.splice(i, 1);
     }
   }
 
   drawGround();
-  if(b.y+b.displayH>GAME_H-groundH||b.y<0){
-    playSound('hit'); state.running=false; state.over=true; drawGameOver(); return;
+
+  // ground/top collisions
+  if (b.y + b.displayH > GAME_H - groundH || b.y < 0) {
+    playSound('hit');
+    state.running = false;
+    state.over = true;
+    drawGameOver();
+    return;
   }
 
-  ctx.fillStyle='#000'; ctx.font='18px Arial';
-  ctx.textAlign='left'; ctx.fillText('Điểm: '+state.score,10,24);
-  ctx.textAlign='right'; ctx.fillText('Kỷ lục: '+state.highScore,GAME_W-10,24);
+  // HUD
+  ctx.fillStyle = '#000';
+  ctx.font = '18px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Điểm: ' + state.score, 10, 24);
+  ctx.textAlign = 'right';
+  ctx.fillText('Kỷ lục: ' + state.highScore, GAME_W - 10, 24);
 
-  state.frame++; requestAnimationFrame(draw);
+  state.frame++;
+  requestAnimationFrame(draw);
 }
 
-/* ==== RESET / START ==== */
+/* ==== Reset / Start ==== */
 function resetGame(){
-  if(state.score>state.highScore){
-    state.highScore=state.score;
-    localStorage.setItem('flappyHighScore',String(state.highScore));
+  if (state.score > state.highScore) {
+    state.highScore = state.score;
+    localStorage.setItem('flappyHighScore', String(state.highScore));
   }
-  state.pipes=[]; state.frame=0; state.score=0; state.groundX=0;
-  state.running=false; state.over=false;
-  const b=state.bird; if(b){ b.y=160; b.velocity=0; }
+  state.pipes = [];
+  state.frame = 0;
+  state.score = 0;
+  state.groundX = 0;
+  state.running = false;
+  state.over = false;
+  if (state.bird) { state.bird.y = 160; state.bird.velocity = 0; }
   drawIntro();
 }
-function startGame(){ resetGame(); state.running=true; draw(); }
+function startGame(){ resetGame(); state.running = true; draw(); }
+
 </script>
 </body>
 </html>
